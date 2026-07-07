@@ -196,7 +196,8 @@ def _league_header(img: Image.Image, game: Game):
     if logo:
         art = logo.copy()
         art.thumbnail((470, 116), Image.LANCZOS)
-        _shadowed_paste(img, art, W // 2, 52 + art.height // 2)
+        # Paste the logo normally without the shadow so it stays flat/clean
+        img.alpha_composite(art, (W // 2 - art.width // 2, 52))
     else:
         _center_text(d, W // 2, 56, game.league_name.upper(), FONT_BOLD, 52, 600, shadow=True)
 
@@ -270,23 +271,39 @@ def _center_badge(img: Image.Image, game: Game, tz: ZoneInfo):
     if bottom_text:
         bh = th_top + th_score + th_bottom + (pad_y * 4) + bottom_extra_pad
     else:
-        # Pushed the multiplier up from 3.0 to 3.8 to add generous bottom margin
         bh = th_top + th_score + (pad_y * 3.8)
 
     box_top = cy - bh / 2
+    box_bounds = [cx - bw / 2, box_top, cx + bw / 2, box_top + bh]
     
-    # Draw Background Box
-    d.rounded_rectangle([cx - bw / 2, box_top, cx + bw / 2, box_top + bh],
+    # -----------------------------------------------------------------
+    # Add a blurred drop shadow behind the score box to make it POP
+    # -----------------------------------------------------------------
+    shadow_img = Image.new("RGBA", (W, H), (0, 0, 0, 0))
+    sd = ImageDraw.Draw(shadow_img)
+    # Draw slightly larger/offset dark box for the shadow
+    sd.rounded_rectangle(
+        [box_bounds[0] - 2, box_bounds[1] + 12, box_bounds[2] + 2, box_bounds[3] + 12],
+        radius=24, fill=(0, 0, 0, 180)
+    )
+    shadow_img = shadow_img.filter(ImageFilter.GaussianBlur(20))
+    img.alpha_composite(shadow_img)
+    
+    # Re-init drawing context since we just composited a new layer
+    d = ImageDraw.Draw(img)
+
+    # Draw Background Box (Thickened outline from 5px to 7px to help it stand out)
+    d.rounded_rectangle(box_bounds,
                         radius=24, fill=box_color,
-                        outline=(255, 255, 255, 255), width=5)
+                        outline=(255, 255, 255, 255), width=7)
 
     # 1. Render Top Line (Status/Date)
     top_y = box_top + pad_y
     _center_text(d, cx, top_y, top_text, FONT_BOLD, top_size, bw, fill=fill_top, shadow=False)
 
-    # 2. Render Middle Line (Score/Time)
+    # 2. Render Middle Line (Score/Time) - Added shadow=True here to make the primary text pop
     score_y = top_y + th_top + pad_y
-    _center_text(d, cx, score_y, score_text, FONT_BOLD, score_size, 330, fill=fill_score, shadow=False)
+    _center_text(d, cx, score_y, score_text, FONT_BOLD, score_size, 330, fill=fill_score, shadow=True)
 
     # 3. Render Bottom Line (Time Left/Start Time) - Only if not game over / not pre game
     if bottom_text:
