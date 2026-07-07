@@ -208,78 +208,80 @@ def _center_badge(img: Image.Image, game: Game, tz: ZoneInfo):
     date_s = local.strftime("%A, %B %-d")
     time_s = local.strftime("%-I:%M %p %Z")
 
-    is_live = False
-    
-    # Configure the three vertical text segments based on game state
+    # Configure styling and text segments based on game state
     if game.state == "pre":
+        box_color = (13, 22, 43, 242)   # Blue
         top_text = date_s
+        top_size = 26
         score_text = "VS"
         score_size = 72
         bottom_text = time_s
     elif game.state == "in":
+        box_color = (194, 24, 24, 242)  # Red
         top_text = "LIVE"
+        top_size = 42                   # Larger text for LIVE
         score_text = f"{game.left.score or '0'} - {game.right.score or '0'}"
         score_size = 96
-        # Time left/period populates game.status_detail in the ESPN API
         bottom_text = game.status_detail or "In Progress"
-        is_live = True
     else:
+        box_color = (50, 50, 50, 242)   # Dark Gray
         detail = (game.status_detail or "FINAL").upper()
         detail = {"FT": "FULL TIME"}.get(detail, detail)
         top_text = detail
+        top_size = 26
         score_text = f"{game.left.score or '0'} - {game.right.score or '0'}"
         score_size = 96
-        bottom_text = date_s
+        bottom_text = ""                # No game date if it's over
 
-    # Measure texts
-    f_top = _font(FONT_BOLD, 26)
+    # Measure Top text
+    f_top = _font(FONT_BOLD, top_size)
     tw_top, th_top = _tsize(d, top_text, f_top)
 
+    # Measure Score text
     f_score = _fit_font(d, score_text, FONT_BOLD, score_size, 330)
     tw_score, th_score = _tsize(d, score_text, f_score)
     
-    f_bottom = _font(FONT_BOLD, 26)
-    tw_bottom, th_bottom = _tsize(d, bottom_text, f_bottom)
+    # Measure Bottom text (only if it exists)
+    if bottom_text:
+        f_bottom = _font(FONT_BOLD, 26)
+        tw_bottom, th_bottom = _tsize(d, bottom_text, f_bottom)
+        bottom_extra_pad = 12  # Moves the game time/date down lower
+    else:
+        tw_bottom, th_bottom = 0, 0
+        bottom_extra_pad = 0
 
-    # Extra top space if drawing a live dot
-    dot_space = 40 if is_live else 0
-    total_top_w = tw_top + dot_space
-
-    # Increase base width bounds
-    bw = max(total_top_w + 60, tw_score + 100, tw_bottom + 60, 340)
+    # Calculate Box Width bounds
+    bw = max(tw_top + 60, tw_score + 100, tw_bottom + 60, 340)
     
-    # Redesigned Padding & Box Sizing: Increased to prevent text overlap
+    # Box Padding & Sizing
     pad_y = 22
-    # Total height incorporates the 3 text heights + 4 layers of padding space
-    bh = th_top + th_score + th_bottom + (pad_y * 4)
+    
+    # Calculate Total Box Height depending on whether bottom text is present
+    if bottom_text:
+        bh = th_top + th_score + th_bottom + (pad_y * 4) + bottom_extra_pad
+    else:
+        # Shrink the box so there isn't dead space at the bottom if the game is over
+        bh = th_top + th_score + (pad_y * 3)
 
     box_top = cy - bh / 2
+    
+    # Draw Background Box
     d.rounded_rectangle([cx - bw / 2, box_top, cx + bw / 2, box_top + bh],
-                        radius=24, fill=(13, 22, 43, 242),
+                        radius=24, fill=box_color,
                         outline=(255, 255, 255, 255), width=5)
 
     # 1. Render Top Line (Status/Date)
     top_y = box_top + pad_y
-    if is_live:
-        text_x = cx + 16
-        _center_text(d, text_x, top_y, top_text, FONT_BOLD, 26, bw, shadow=False)
-        tw_top_actual, _ = _tsize(d, top_text, f_top)
-        
-        # Red Dot 
-        dot_r = 7
-        dot_cx = text_x - tw_top_actual / 2 - 20
-        dot_cy = top_y + th_top / 2 + 2
-        d.ellipse([dot_cx - dot_r, dot_cy - dot_r, dot_cx + dot_r, dot_cy + dot_r], fill=(232, 55, 55, 255))
-    else:
-        _center_text(d, cx, top_y, top_text, FONT_BOLD, 26, bw, shadow=False)
+    _center_text(d, cx, top_y, top_text, FONT_BOLD, top_size, bw, shadow=False)
 
-    # 2. Render Middle Line (Score/VS) - Now fully separated
+    # 2. Render Middle Line (Score/VS)
     score_y = top_y + th_top + pad_y
     _center_text(d, cx, score_y, score_text, FONT_BOLD, score_size, 330, shadow=False)
 
-    # 3. Render Bottom Line (Time Left/Start Time/Date) - Safely moved downward
-    bottom_y = score_y + th_score + pad_y
-    _center_text(d, cx, bottom_y, bottom_text, FONT_BOLD, 26, bw, shadow=False)
+    # 3. Render Bottom Line (Time Left/Start Time) - Only if not game over
+    if bottom_text:
+        bottom_y = score_y + th_score + pad_y + bottom_extra_pad
+        _center_text(d, cx, bottom_y, bottom_text, FONT_BOLD, 26, bw, shadow=False)
 
     # 4. Render broadcast channel strictly limited to one channel
     if game.broadcast:
@@ -291,6 +293,7 @@ def _center_badge(img: Image.Image, game: Game, tz: ZoneInfo):
         single_channel = parts[0].strip() if parts else ""
         
         if single_channel:
+            # Broadcast stays pinned dynamically underneath the bottom edge of the box
             _center_text(d, cx, box_top + bh + 16, single_channel, FONT_BOLD, 28, 400, fill=(255, 255, 255, 240))
 
 
