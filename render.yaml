@@ -1,0 +1,20 @@
+services:
+  - type: web
+    name: sports-wallpaper
+    runtime: python
+    plan: free
+    buildCommand: pip install -r requirements.txt
+    startCommand: uvicorn app:app --host 0.0.0.0 --port $PORT --proxy-headers --forwarded-allow-ips="*"
+    envVars:
+      - key: PYTHON_VERSION
+        value: 3.12.4
+      - key: LEAGUES
+        value: soccer/fifa.world,baseball/mlb, basketball/wnba
+      - key: TEAMS
+        value: "baseball/mlb:Braves,basketball/wnba:Sun"
+      - key: TIMEZONE
+        value: America/Chicago
+      - key: MAX_GAMES
+        value: "8"
+      - key: SHOW_ALL_IF_NO_MATCH
+        value: "false"
