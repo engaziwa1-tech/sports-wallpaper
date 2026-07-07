@@ -9,12 +9,12 @@ services:
       - key: PYTHON_VERSION
         value: 3.12.4
       - key: LEAGUES
-        value: soccer/fifa.world,baseball/mlb,basketball/wnba
+        value: baseball/mlb
       - key: TEAMS
         value: ""
       - key: TIMEZONE
         value: America/Chicago
       - key: MAX_GAMES
-        value: "8"
+        value: "10"
       - key: SHOW_ALL_IF_NO_MATCH
         value: "false"
