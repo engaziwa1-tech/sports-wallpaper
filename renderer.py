@@ -210,18 +210,18 @@ def _center_badge(img: Image.Image, game: Game, tz: ZoneInfo):
 
     is_live = False
     
-    # Configure the three vertical text segments: Top (Status), Middle (Score), Bottom (Time)
+    # Configure the three vertical text segments based on game state
     if game.state == "pre":
         top_text = date_s
         score_text = "VS"
         score_size = 72
         bottom_text = time_s
     elif game.state == "in":
-        detail = game.status_detail or "LIVE"
-        top_text = f"LIVE   •   {detail}"
+        top_text = "LIVE"
         score_text = f"{game.left.score or '0'} - {game.right.score or '0'}"
         score_size = 96
-        bottom_text = time_s
+        # Time left/period populates game.status_detail in the ESPN API
+        bottom_text = game.status_detail or "In Progress"
         is_live = True
     else:
         detail = (game.status_detail or "FINAL").upper()
@@ -231,7 +231,7 @@ def _center_badge(img: Image.Image, game: Game, tz: ZoneInfo):
         score_size = 96
         bottom_text = date_s
 
-    # Measure all 3 strings to scale the single center box dynamically
+    # Measure texts
     f_top = _font(FONT_BOLD, 26)
     tw_top, th_top = _tsize(d, top_text, f_top)
 
@@ -241,13 +241,17 @@ def _center_badge(img: Image.Image, game: Game, tz: ZoneInfo):
     f_bottom = _font(FONT_BOLD, 26)
     tw_bottom, th_bottom = _tsize(d, bottom_text, f_bottom)
 
-    # Give extra width padding to the top text if drawing a live dot
-    dot_space = 36 if is_live else 0
+    # Extra top space if drawing a live dot
+    dot_space = 40 if is_live else 0
     total_top_w = tw_top + dot_space
 
-    bw = max(total_top_w + 60, tw_score + 100, tw_bottom + 60, 320)
-    # The box height accounts for all 3 elements + padding between lines
-    bh = th_top + th_score + th_bottom + 45
+    # Increase base width bounds
+    bw = max(total_top_w + 60, tw_score + 100, tw_bottom + 60, 340)
+    
+    # Redesigned Padding & Box Sizing: Increased to prevent text overlap
+    pad_y = 22
+    # Total height incorporates the 3 text heights + 4 layers of padding space
+    bh = th_top + th_score + th_bottom + (pad_y * 4)
 
     box_top = cy - bh / 2
     d.rounded_rectangle([cx - bw / 2, box_top, cx + bw / 2, box_top + bh],
@@ -255,32 +259,37 @@ def _center_badge(img: Image.Image, game: Game, tz: ZoneInfo):
                         outline=(255, 255, 255, 255), width=5)
 
     # 1. Render Top Line (Status/Date)
-    top_y = box_top + 14
+    top_y = box_top + pad_y
     if is_live:
-        text_x = cx + 12
+        text_x = cx + 16
         _center_text(d, text_x, top_y, top_text, FONT_BOLD, 26, bw, shadow=False)
         tw_top_actual, _ = _tsize(d, top_text, f_top)
         
         # Red Dot 
         dot_r = 7
-        dot_cx = text_x - tw_top_actual / 2 - 16
+        dot_cx = text_x - tw_top_actual / 2 - 20
         dot_cy = top_y + th_top / 2 + 2
         d.ellipse([dot_cx - dot_r, dot_cy - dot_r, dot_cx + dot_r, dot_cy + dot_r], fill=(232, 55, 55, 255))
     else:
         _center_text(d, cx, top_y, top_text, FONT_BOLD, 26, bw, shadow=False)
 
-    # 2. Render Middle Line (Score/VS)
-    score_y = top_y + th_top + 8
+    # 2. Render Middle Line (Score/VS) - Now fully separated
+    score_y = top_y + th_top + pad_y
     _center_text(d, cx, score_y, score_text, FONT_BOLD, score_size, 330, shadow=False)
 
-    # 3. Render Bottom Line (Time)
-    bottom_y = score_y + th_score + 8
+    # 3. Render Bottom Line (Time Left/Start Time/Date) - Safely moved downward
+    bottom_y = score_y + th_score + pad_y
     _center_text(d, cx, bottom_y, bottom_text, FONT_BOLD, 26, bw, shadow=False)
 
-    # Render broadcast channel right beneath the full box 
+    # 4. Render broadcast channel strictly limited to one channel
     if game.broadcast:
-        # Aggressively matches against commas, slashes, pipes, ampersands, or the word "and"
-        single_channel = re.split(r'(?i)[,/|&]|\band\b', game.broadcast)[0].strip()
+        raw_bcast = str(game.broadcast)
+        # Strips out brackets and quotes if game.broadcast was passed as a raw stringified python list
+        clean_bcast = re.sub(r"[\[\]\"']", "", raw_bcast)
+        # Aggressively split string on anything that resembles a delimiter 
+        parts = re.split(r'(?i)[,/|&]|\band\b', clean_bcast)
+        single_channel = parts[0].strip() if parts else ""
+        
         if single_channel:
             _center_text(d, cx, box_top + bh + 16, single_channel, FONT_BOLD, 28, 400, fill=(255, 255, 255, 240))
 
