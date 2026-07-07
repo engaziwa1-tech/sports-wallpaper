@@ -9,7 +9,7 @@ services:
       - key: PYTHON_VERSION
         value: 3.12.4
       - key: LEAGUES
-        value: soccer/fifa.world,tennis/wta,baseball/mlb
+        value: baseball/mlb
       - key: TEAMS
         value: ""
       - key: TIMEZONE
