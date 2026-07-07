@@ -9,7 +9,7 @@ services:
       - key: PYTHON_VERSION
         value: 3.12.4
       - key: LEAGUES
-        value: baseball/mlb
+        value: baseball/mlb,basketball/wnba
       - key: TEAMS
         value: ""
       - key: TIMEZONE
