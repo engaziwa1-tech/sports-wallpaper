@@ -210,67 +210,79 @@ def _center_badge(img: Image.Image, game: Game, tz: ZoneInfo):
 
     is_live = False
     
-    # Setup Score (Top) and Details (Bottom) strings 
+    # Configure the three vertical text segments: Top (Status), Middle (Score), Bottom (Time)
     if game.state == "pre":
+        top_text = date_s
         score_text = "VS"
         score_size = 72
-        detail_text = f"{date_s}   •   {time_s}"
+        bottom_text = time_s
     elif game.state == "in":
+        detail = game.status_detail or "LIVE"
+        top_text = f"LIVE   •   {detail}"
         score_text = f"{game.left.score or '0'} - {game.right.score or '0'}"
         score_size = 96
-        detail = game.status_detail or "LIVE"
-        detail_text = f"LIVE   •   {detail}"
+        bottom_text = time_s
         is_live = True
     else:
         detail = (game.status_detail or "FINAL").upper()
         detail = {"FT": "FULL TIME"}.get(detail, detail)
+        top_text = detail
         score_text = f"{game.left.score or '0'} - {game.right.score or '0'}"
         score_size = 96
-        detail_text = f"{detail}   •   {date_s}"
+        bottom_text = date_s
 
-    # Measure texts
+    # Measure all 3 strings to scale the single center box dynamically
+    f_top = _font(FONT_BOLD, 26)
+    tw_top, th_top = _tsize(d, top_text, f_top)
+
     f_score = _fit_font(d, score_text, FONT_BOLD, score_size, 330)
     tw_score, th_score = _tsize(d, score_text, f_score)
+    
+    f_bottom = _font(FONT_BOLD, 26)
+    tw_bottom, th_bottom = _tsize(d, bottom_text, f_bottom)
 
-    f_detail = _font(FONT_BOLD, 26)
-    tw_detail, th_detail = _tsize(d, detail_text, f_detail)
-
-    # Extra space for live dot
+    # Give extra width padding to the top text if drawing a live dot
     dot_space = 36 if is_live else 0
-    total_detail_w = tw_detail + dot_space
+    total_top_w = tw_top + dot_space
 
-    bw = max(total_detail_w + 60, tw_score + 100, 320)
-    bh = th_score + th_detail + 40
+    bw = max(total_top_w + 60, tw_score + 100, tw_bottom + 60, 320)
+    # The box height accounts for all 3 elements + padding between lines
+    bh = th_top + th_score + th_bottom + 45
 
     box_top = cy - bh / 2
     d.rounded_rectangle([cx - bw / 2, box_top, cx + bw / 2, box_top + bh],
                         radius=24, fill=(13, 22, 43, 242),
                         outline=(255, 255, 255, 255), width=5)
 
-    # Render Main Score/VS (Top)
-    score_y = box_top + 12
-    _center_text(d, cx, score_y, score_text, FONT_BOLD, score_size, 330, shadow=False)
-
-    # Render Detail (Bottom)
-    detail_y = score_y + th_score + 8
+    # 1. Render Top Line (Status/Date)
+    top_y = box_top + 14
     if is_live:
         text_x = cx + 12
-        _center_text(d, text_x, detail_y, detail_text, FONT_BOLD, 26, bw, shadow=False)
-        tw_detail_actual, _ = _tsize(d, detail_text, f_detail)
+        _center_text(d, text_x, top_y, top_text, FONT_BOLD, 26, bw, shadow=False)
+        tw_top_actual, _ = _tsize(d, top_text, f_top)
         
         # Red Dot 
         dot_r = 7
-        dot_cx = text_x - tw_detail_actual / 2 - 16
-        dot_cy = detail_y + th_detail / 2 + 2
+        dot_cx = text_x - tw_top_actual / 2 - 16
+        dot_cy = top_y + th_top / 2 + 2
         d.ellipse([dot_cx - dot_r, dot_cy - dot_r, dot_cx + dot_r, dot_cy + dot_r], fill=(232, 55, 55, 255))
     else:
-        _center_text(d, cx, detail_y, detail_text, FONT_BOLD, 26, bw, shadow=False)
+        _center_text(d, cx, top_y, top_text, FONT_BOLD, 26, bw, shadow=False)
 
-    # Render broadcast channel beneath the box 
+    # 2. Render Middle Line (Score/VS)
+    score_y = top_y + th_top + 8
+    _center_text(d, cx, score_y, score_text, FONT_BOLD, score_size, 330, shadow=False)
+
+    # 3. Render Bottom Line (Time)
+    bottom_y = score_y + th_score + 8
+    _center_text(d, cx, bottom_y, bottom_text, FONT_BOLD, 26, bw, shadow=False)
+
+    # Render broadcast channel right beneath the full box 
     if game.broadcast:
-        # Splits cleanly on comma, forward-slash, or pipe delimiters to isolate a single channel
-        single_channel = re.split(r'[,/|]', game.broadcast)[0].strip()
-        _center_text(d, cx, box_top + bh + 16, single_channel, FONT_BOLD, 28, 400, fill=(255, 255, 255, 240))
+        # Aggressively matches against commas, slashes, pipes, ampersands, or the word "and"
+        single_channel = re.split(r'(?i)[,/|&]|\band\b', game.broadcast)[0].strip()
+        if single_channel:
+            _center_text(d, cx, box_top + bh + 16, single_channel, FONT_BOLD, 28, 400, fill=(255, 255, 255, 240))
 
 
 def render_game(game: Game, tz_name: str) -> bytes:
