@@ -203,8 +203,7 @@ def _league_header(img: Image.Image, game: Game):
         art.thumbnail((470, 116), Image.LANCZOS)
         pw, ph = art.width + 64, art.height + 36
         x0, y0 = (W - pw) // 2, 52
-        d.rounded_rectangle([x0, y0, x0 + pw, y0 + ph], radius=26, fill=(6, 10, 20, 96))
-        img.alpha_composite(art, ((W - art.width) // 2, y0 + (ph - art.height) // 2))
+        img.alpha_composite(art, ((W - art.width) // 2, y0 + 8))
     else:
         f = _font(FONT_BOLD, 52)
         tw, th = _tsize(d, game.league_name.upper(), f)
@@ -232,7 +231,11 @@ def _center_badge(img: Image.Image, game: Game):
         d.rounded_rectangle([cx - bw / 2, cy - bh / 2, cx + bw / 2, cy + bh / 2],
                             radius=30, fill=(13, 22, 43, 242),
                             outline=(255, 255, 255, 255), width=6)
-        d.text((cx - tw / 2, cy - th / 2 - 10), score, font=f, fill=(255, 255, 255, 255))
+        status=(game.status_text if hasattr(game,"status_text") else ("LIVE" if game.state=="in" else "FINAL")).upper()
+        sf=_font(FONT_BOLD,34)
+        stw,sth=_tsize(d,status,sf)
+        d.text((cx-stw/2, cy-bh/2+18),status,font=sf,fill=(255,255,255,255))
+        d.text((cx - tw / 2, cy - th / 2 + 14), score, font=f, fill=(255, 255, 255, 255))
 
 
 def _bottom_block(img: Image.Image, game: Game, tz: ZoneInfo):
@@ -259,7 +262,7 @@ def _bottom_block(img: Image.Image, game: Game, tz: ZoneInfo):
 
     y = 936
     if game.broadcast:
-        _center_text(d, cx, y, game.broadcast, FONT_REG, 46, 1700, fill=(255, 255, 255, 240))
+        _center_text(d,cx,y,game.broadcast.split(",")[0],FONT_REG,46,1700,fill=(255,255,255,240))
         y += 66
     if game.venue:
         _center_text(d, cx, y, game.venue, FONT_REG, 36, 1500, fill=(255, 255, 255, 185))
