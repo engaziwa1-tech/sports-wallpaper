@@ -205,7 +205,9 @@ def _center_badge(img: Image.Image, game: Game, tz: ZoneInfo):
     d = ImageDraw.Draw(img)
     cx, cy = W // 2, LOGO_CY
     local = game.start_utc.astimezone(tz)
-    date_s = local.strftime("%A, %B %-d")
+    
+    # %a uses the short day of the week (e.g. Mon)
+    date_s = local.strftime("%a, %B %-d")
     time_s = local.strftime("%-I:%M %p %Z")
 
     # Tiered text coloring so the elements don't visually bleed together
@@ -218,9 +220,9 @@ def _center_badge(img: Image.Image, game: Game, tz: ZoneInfo):
         box_color = (13, 22, 43, 242)   # Blue
         top_text = date_s
         top_size = 26
-        score_text = "VS"
-        score_size = 72
-        bottom_text = time_s
+        score_text = time_s             # Large time replaces VS
+        score_size = 64                 
+        bottom_text = ""                # Cleared out so the box naturally shrinks
     elif game.state == "in":
         box_color = (130, 15, 15, 242)  # Darker Red
         top_text = "LIVE"
@@ -245,7 +247,7 @@ def _center_badge(img: Image.Image, game: Game, tz: ZoneInfo):
     f_top = _font(FONT_BOLD, top_size)
     tw_top, th_top = _tsize(d, top_text, f_top)
 
-    # Measure Score text
+    # Measure Score text (auto-scales if the time string is long)
     f_score = _fit_font(d, score_text, FONT_BOLD, score_size, 330)
     tw_score, th_score = _tsize(d, score_text, f_score)
     
@@ -268,7 +270,7 @@ def _center_badge(img: Image.Image, game: Game, tz: ZoneInfo):
     if bottom_text:
         bh = th_top + th_score + th_bottom + (pad_y * 4) + bottom_extra_pad
     else:
-        # Pushed the multiplier up from 3.0 to 3.8 to add generous bottom margin below the final score
+        # Pushed the multiplier up from 3.0 to 3.8 to add generous bottom margin
         bh = th_top + th_score + (pad_y * 3.8)
 
     box_top = cy - bh / 2
@@ -282,11 +284,11 @@ def _center_badge(img: Image.Image, game: Game, tz: ZoneInfo):
     top_y = box_top + pad_y
     _center_text(d, cx, top_y, top_text, FONT_BOLD, top_size, bw, fill=fill_top, shadow=False)
 
-    # 2. Render Middle Line (Score/VS)
+    # 2. Render Middle Line (Score/Time)
     score_y = top_y + th_top + pad_y
     _center_text(d, cx, score_y, score_text, FONT_BOLD, score_size, 330, fill=fill_score, shadow=False)
 
-    # 3. Render Bottom Line (Time Left/Start Time) - Only if not game over
+    # 3. Render Bottom Line (Time Left/Start Time) - Only if not game over / not pre game
     if bottom_text:
         bottom_y = score_y + th_score + pad_y + bottom_extra_pad
         _center_text(d, cx, bottom_y, bottom_text, FONT_BOLD, 26, bw, fill=fill_bottom, shadow=False)
@@ -339,7 +341,9 @@ def render_no_games(league_names: list[str], tz_name: str, teams: list[str]) -> 
         d.ellipse([W / 2 - r, H / 2 - r - 40, W / 2 + r, H / 2 + r - 40],
                   outline=(255, 255, 255, 14), width=3)
     _center_text(d, W // 2, 420, "NO GAMES TODAY", FONT_BOLD, 96, 1700)
-    today = datetime.now(tz).strftime("%A, %B %-d")
+    
+    # %a uses the short day of the week (e.g. Mon) here too
+    today = datetime.now(tz).strftime("%a, %B %-d")
     _center_text(d, W // 2, 560, today, FONT_REG, 50, 1500, fill=(255, 255, 255, 210))
     scope = ", ".join(teams) if teams else ", ".join(league_names)
     if scope:
