@@ -4,6 +4,7 @@ league logo, date/time, broadcast) in the style of MFT matchup cards."""
 from __future__ import annotations
 
 import io
+import re
 import colorsys
 from datetime import datetime
 from zoneinfo import ZoneInfo
@@ -122,7 +123,6 @@ def _shadowed_paste(canvas: Image.Image, art: Image.Image, cx: int, cy: int):
     """Paste artwork centered at (cx, cy) with a soft drop shadow."""
     a = art.split()[3]
     shadow = Image.new("RGBA", art.size, (0, 0, 0, 0))
-    # Increased opacity multiplier to 0.75 and blur to 16 for better visibility against backgrounds
     shadow.putalpha(a.point(lambda v: int(v * 0.75)))
     shadow = shadow.filter(ImageFilter.GaussianBlur(16))
     x, y = cx - art.width // 2, cy - art.height // 2
@@ -178,13 +178,11 @@ def _base_canvas(left_rgb, right_rgb) -> Image.Image:
             rd.ellipse([cx - r, LOGO_CY - r, cx + r, LOGO_CY + r], outline=tone, width=3)
     img.alpha_composite(rings)
 
+    # Gradient band solely at the top so league text stays readable
     grad = Image.new("RGBA", (W, H), (0, 0, 0, 0))
     gd = ImageDraw.Draw(grad)
     for i in range(180):
         gd.line([(0, i), (W, i)], fill=(0, 0, 0, int(80 * (1 - i / 180))))
-    for i in range(320):
-        y = H - 320 + i
-        gd.line([(0, y), (W, y)], fill=(0, 0, 0, int(135 * (i / 320))))
     img.alpha_composite(grad)
 
     d = ImageDraw.Draw(img)
@@ -198,7 +196,6 @@ def _league_header(img: Image.Image, game: Game):
     if logo:
         art = logo.copy()
         art.thumbnail((470, 116), Image.LANCZOS)
-        # Using shadowed paste keeps it easily visible without the black box
         _shadowed_paste(img, art, W // 2, 52 + art.height // 2)
     else:
         _center_text(d, W // 2, 56, game.league_name.upper(), FONT_BOLD, 52, 600, shadow=True)
@@ -212,64 +209,67 @@ def _center_badge(img: Image.Image, game: Game, tz: ZoneInfo):
     time_s = local.strftime("%-I:%M %p %Z")
 
     is_live = False
+    
+    # Setup Score (Top) and Details (Bottom) strings 
     if game.state == "pre":
-        top_text = f"{date_s}   •   {time_s}"
-        main_text = "VS"
-        main_size = 72
+        score_text = "VS"
+        score_size = 72
+        detail_text = f"{date_s}   •   {time_s}"
     elif game.state == "in":
+        score_text = f"{game.left.score or '0'} - {game.right.score or '0'}"
+        score_size = 96
         detail = game.status_detail or "LIVE"
-        top_text = f"LIVE   •   {detail}"
-        main_text = f"{game.left.score or '0'} - {game.right.score or '0'}"
-        main_size = 96
+        detail_text = f"LIVE   •   {detail}"
         is_live = True
     else:
         detail = (game.status_detail or "FINAL").upper()
         detail = {"FT": "FULL TIME"}.get(detail, detail)
-        top_text = f"{detail}   •   {date_s}"
-        main_text = f"{game.left.score or '0'} - {game.right.score or '0'}"
-        main_size = 96
+        score_text = f"{game.left.score or '0'} - {game.right.score or '0'}"
+        score_size = 96
+        detail_text = f"{detail}   •   {date_s}"
 
-    # Measure texts to construct the dynamic box
-    f_top = _font(FONT_BOLD, 26)
-    tw_top, th_top = _tsize(d, top_text, f_top)
+    # Measure texts
+    f_score = _fit_font(d, score_text, FONT_BOLD, score_size, 330)
+    tw_score, th_score = _tsize(d, score_text, f_score)
 
-    f_main = _fit_font(d, main_text, FONT_BOLD, main_size, 330)
-    tw_main, th_main = _tsize(d, main_text, f_main)
+    f_detail = _font(FONT_BOLD, 26)
+    tw_detail, th_detail = _tsize(d, detail_text, f_detail)
 
-    # Allow extra space in the top text width if rendering the live red dot
+    # Extra space for live dot
     dot_space = 36 if is_live else 0
-    total_top_w = tw_top + dot_space
+    total_detail_w = tw_detail + dot_space
 
-    bw = max(total_top_w + 60, tw_main + 100, 320)
-    bh = th_top + th_main + 50
+    bw = max(total_detail_w + 60, tw_score + 100, 320)
+    bh = th_score + th_detail + 40
 
     box_top = cy - bh / 2
     d.rounded_rectangle([cx - bw / 2, box_top, cx + bw / 2, box_top + bh],
                         radius=24, fill=(13, 22, 43, 242),
                         outline=(255, 255, 255, 255), width=5)
 
-    # Render top line (Status/Time)
-    top_y = box_top + 16
+    # Render Main Score/VS (Top)
+    score_y = box_top + 12
+    _center_text(d, cx, score_y, score_text, FONT_BOLD, score_size, 330, shadow=False)
+
+    # Render Detail (Bottom)
+    detail_y = score_y + th_score + 8
     if is_live:
         text_x = cx + 12
-        _center_text(d, text_x, top_y, top_text, FONT_BOLD, 26, bw, shadow=False)
-        tw_top_actual, _ = _tsize(d, top_text, f_top)
+        _center_text(d, text_x, detail_y, detail_text, FONT_BOLD, 26, bw, shadow=False)
+        tw_detail_actual, _ = _tsize(d, detail_text, f_detail)
         
         # Red Dot 
         dot_r = 7
-        dot_cx = text_x - tw_top_actual / 2 - 16
-        dot_cy = top_y + th_top / 2 + 2
+        dot_cx = text_x - tw_detail_actual / 2 - 16
+        dot_cy = detail_y + th_detail / 2 + 2
         d.ellipse([dot_cx - dot_r, dot_cy - dot_r, dot_cx + dot_r, dot_cy + dot_r], fill=(232, 55, 55, 255))
     else:
-        _center_text(d, cx, top_y, top_text, FONT_BOLD, 26, bw, shadow=False)
+        _center_text(d, cx, detail_y, detail_text, FONT_BOLD, 26, bw, shadow=False)
 
-    # Render main line (Score/VS)
-    main_y = top_y + th_top + 8
-    _center_text(d, cx, main_y, main_text, FONT_BOLD, main_size, 330, shadow=False)
-
-    # Render single broadcast channel right below the box
+    # Render broadcast channel beneath the box 
     if game.broadcast:
-        single_channel = game.broadcast.split(',')[0].strip()
+        # Splits cleanly on comma, forward-slash, or pipe delimiters to isolate a single channel
+        single_channel = re.split(r'[,/|]', game.broadcast)[0].strip()
         _center_text(d, cx, box_top + bh + 16, single_channel, FONT_BOLD, 28, 400, fill=(255, 255, 255, 240))
 
 
