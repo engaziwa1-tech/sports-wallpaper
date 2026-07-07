@@ -13,7 +13,7 @@ services:
       - key: TEAMS
         value: ""
       - key: TIMEZONE
-        value: America/New York
+        value: America/New_York
       - key: MAX_GAMES
         value: "15"
       - key: SHOW_ALL_IF_NO_MATCH
