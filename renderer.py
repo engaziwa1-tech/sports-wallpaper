@@ -208,6 +208,11 @@ def _center_badge(img: Image.Image, game: Game, tz: ZoneInfo):
     date_s = local.strftime("%A, %B %-d")
     time_s = local.strftime("%-I:%M %p %Z")
 
+    # Tiered text coloring so the elements don't visually bleed together
+    fill_top = (235, 235, 240, 255)    # Light Platinum
+    fill_score = (255, 255, 255, 255)  # Crisp White
+    fill_bottom = (190, 195, 205, 255) # Slate Grey
+
     # Configure styling and text segments based on game state
     if game.state == "pre":
         box_color = (13, 22, 43, 242)   # Blue
@@ -217,12 +222,15 @@ def _center_badge(img: Image.Image, game: Game, tz: ZoneInfo):
         score_size = 72
         bottom_text = time_s
     elif game.state == "in":
-        box_color = (194, 24, 24, 242)  # Red
+        box_color = (130, 15, 15, 242)  # Darker Red
         top_text = "LIVE"
-        top_size = 42                   # Larger text for LIVE
+        top_size = 42                   
         score_text = f"{game.left.score or '0'} - {game.right.score or '0'}"
         score_size = 96
         bottom_text = game.status_detail or "In Progress"
+        
+        # Warm up the bottom gray text just slightly so it doesn't clash with the dark red box
+        fill_bottom = (215, 205, 205, 255) 
     else:
         box_color = (50, 50, 50, 242)   # Dark Gray
         detail = (game.status_detail or "FINAL").upper()
@@ -260,8 +268,8 @@ def _center_badge(img: Image.Image, game: Game, tz: ZoneInfo):
     if bottom_text:
         bh = th_top + th_score + th_bottom + (pad_y * 4) + bottom_extra_pad
     else:
-        # Shrink the box so there isn't dead space at the bottom if the game is over
-        bh = th_top + th_score + (pad_y * 3)
+        # Pushed the multiplier up from 3.0 to 3.8 to add generous bottom margin below the final score
+        bh = th_top + th_score + (pad_y * 3.8)
 
     box_top = cy - bh / 2
     
@@ -272,16 +280,16 @@ def _center_badge(img: Image.Image, game: Game, tz: ZoneInfo):
 
     # 1. Render Top Line (Status/Date)
     top_y = box_top + pad_y
-    _center_text(d, cx, top_y, top_text, FONT_BOLD, top_size, bw, shadow=False)
+    _center_text(d, cx, top_y, top_text, FONT_BOLD, top_size, bw, fill=fill_top, shadow=False)
 
     # 2. Render Middle Line (Score/VS)
     score_y = top_y + th_top + pad_y
-    _center_text(d, cx, score_y, score_text, FONT_BOLD, score_size, 330, shadow=False)
+    _center_text(d, cx, score_y, score_text, FONT_BOLD, score_size, 330, fill=fill_score, shadow=False)
 
     # 3. Render Bottom Line (Time Left/Start Time) - Only if not game over
     if bottom_text:
         bottom_y = score_y + th_score + pad_y + bottom_extra_pad
-        _center_text(d, cx, bottom_y, bottom_text, FONT_BOLD, 26, bw, shadow=False)
+        _center_text(d, cx, bottom_y, bottom_text, FONT_BOLD, 26, bw, fill=fill_bottom, shadow=False)
 
     # 4. Render broadcast channel strictly limited to one channel
     if game.broadcast:
