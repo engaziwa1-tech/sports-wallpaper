@@ -56,7 +56,6 @@ def pick_bg(color: str, alt: str) -> tuple[int, int, int]:
     candidates = [c for c in (_hex_rgb(color), _hex_rgb(alt)) if c]
     if not candidates:
         return (30, 41, 66)
-    # Prefer a color that is neither near-white nor near-black and has some chroma
     for c in candidates:
         if 0.10 <= _lum(c) <= 0.72 and _sat(c) >= 0.15:
             return c
@@ -64,9 +63,9 @@ def pick_bg(color: str, alt: str) -> tuple[int, int, int]:
         if 0.10 <= _lum(c) <= 0.80:
             return c
     c = candidates[0]
-    if _lum(c) > 0.72:  # near white -> darken hard
+    if _lum(c) > 0.72:
         return _scale(c, 0.45) if _sat(c) > 0.05 else (38, 46, 66)
-    if _lum(c) < 0.08:  # near black -> lift slightly
+    if _lum(c) < 0.08:
         return tuple(min(255, v + 28) for v in c)  # type: ignore
     return c
 
@@ -123,8 +122,9 @@ def _shadowed_paste(canvas: Image.Image, art: Image.Image, cx: int, cy: int):
     """Paste artwork centered at (cx, cy) with a soft drop shadow."""
     a = art.split()[3]
     shadow = Image.new("RGBA", art.size, (0, 0, 0, 0))
-    shadow.putalpha(a.point(lambda v: int(v * 0.45)))
-    shadow = shadow.filter(ImageFilter.GaussianBlur(14))
+    # Increased opacity multiplier to 0.75 and blur to 16 for better visibility against backgrounds
+    shadow.putalpha(a.point(lambda v: int(v * 0.75)))
+    shadow = shadow.filter(ImageFilter.GaussianBlur(16))
     x, y = cx - art.width // 2, cy - art.height // 2
     canvas.alpha_composite(shadow, (x, y + 14))
     canvas.alpha_composite(art, (x, y))
@@ -170,7 +170,6 @@ def _base_canvas(left_rgb, right_rgb) -> Image.Image:
     d.rectangle([0, 0, W // 2, H], fill=left_rgb + (255,))
     d.rectangle([W // 2, 0, W, H], fill=right_rgb + (255,))
 
-    # Concentric rings around each crest (the MFT signature)
     rings = Image.new("RGBA", (W, H), (0, 0, 0, 0))
     rd = ImageDraw.Draw(rings)
     for cx, bg in ((LEFT_CX, left_rgb), (RIGHT_CX, right_rgb)):
@@ -179,7 +178,6 @@ def _base_canvas(left_rgb, right_rgb) -> Image.Image:
             rd.ellipse([cx - r, LOGO_CY - r, cx + r, LOGO_CY + r], outline=tone, width=3)
     img.alpha_composite(rings)
 
-    # Gradient bands top & bottom so overlay text is readable on any color
     grad = Image.new("RGBA", (W, H), (0, 0, 0, 0))
     gd = ImageDraw.Draw(grad)
     for i in range(180):
@@ -189,7 +187,6 @@ def _base_canvas(left_rgb, right_rgb) -> Image.Image:
         gd.line([(0, y), (W, y)], fill=(0, 0, 0, int(135 * (i / 320))))
     img.alpha_composite(grad)
 
-    # Center divider
     d = ImageDraw.Draw(img)
     d.rectangle([W // 2 - 3, 0, W // 2 + 3, H], fill=(255, 255, 255, 215))
     return img
@@ -201,71 +198,79 @@ def _league_header(img: Image.Image, game: Game):
     if logo:
         art = logo.copy()
         art.thumbnail((470, 116), Image.LANCZOS)
-        pw, ph = art.width + 64, art.height + 36
-        x0, y0 = (W - pw) // 2, 52
-        img.alpha_composite(art, ((W - art.width) // 2, y0 + 8))
+        # Using shadowed paste keeps it easily visible without the black box
+        _shadowed_paste(img, art, W // 2, 52 + art.height // 2)
     else:
-        f = _font(FONT_BOLD, 52)
-        tw, th = _tsize(d, game.league_name.upper(), f)
-        pw, ph = tw + 76, th + 44
-        x0, y0 = (W - pw) // 2, 56
-        d.rounded_rectangle([x0, y0, x0 + pw, y0 + ph], radius=26, fill=(6, 10, 20, 96))
-        d.text(((W - tw) / 2, y0 + 20), game.league_name.upper(), font=f, fill=(255, 255, 255, 245))
+        _center_text(d, W // 2, 56, game.league_name.upper(), FONT_BOLD, 52, 600, shadow=True)
 
 
-def _center_badge(img: Image.Image, game: Game):
+def _center_badge(img: Image.Image, game: Game, tz: ZoneInfo):
     d = ImageDraw.Draw(img)
     cx, cy = W // 2, LOGO_CY
-    if game.state == "pre":
-        r = 88
-        d.ellipse([cx - r, cy - r, cx + r, cy + r], fill=(13, 22, 43, 255),
-                  outline=(255, 255, 255, 255), width=7)
-        f = _font(FONT_BOLD, 60)
-        tw, th = _tsize(d, "VS", f)
-        d.text((cx - tw / 2, cy - th / 2 - 8), "VS", font=f, fill=(255, 255, 255, 255))
-    else:
-        score = f"{game.left.score or '0'} - {game.right.score or '0'}"
-        f = _fit_font(d, score, FONT_BOLD, 96, 330)
-        tw, th = _tsize(d, score, f)
-        bw, bh = max(tw + 110, 340), 168
-        d.rounded_rectangle([cx - bw / 2, cy - bh / 2, cx + bw / 2, cy + bh / 2],
-                            radius=30, fill=(13, 22, 43, 242),
-                            outline=(255, 255, 255, 255), width=6)
-        status=(game.status_text if hasattr(game,"status_text") else ("LIVE" if game.state=="in" else "FINAL")).upper()
-        sf=_font(FONT_BOLD,34)
-        stw,sth=_tsize(d,status,sf)
-        d.text((cx-stw/2, cy-bh/2+18),status,font=sf,fill=(255,255,255,255))
-        d.text((cx - tw / 2, cy - th / 2 + 14), score, font=f, fill=(255, 255, 255, 255))
-
-
-def _bottom_block(img: Image.Image, game: Game, tz: ZoneInfo):
-    d = ImageDraw.Draw(img)
-    cx = W // 2
     local = game.start_utc.astimezone(tz)
     date_s = local.strftime("%A, %B %-d")
     time_s = local.strftime("%-I:%M %p %Z")
 
+    is_live = False
     if game.state == "pre":
-        line1 = f"{date_s}   •   {time_s}"
-        _center_text(d, cx, 852, line1, FONT_BOLD, 58, 1700)
+        top_text = f"{date_s}   •   {time_s}"
+        main_text = "VS"
+        main_size = 72
     elif game.state == "in":
         detail = game.status_detail or "LIVE"
-        f = _center_text(d, cx + 26, 852, f"LIVE   •   {detail}", FONT_BOLD, 58, 1600)
-        tw, th = _tsize(d, f"LIVE   •   {detail}", f)
-        dot_x = cx + 26 - tw / 2 - 44
-        d.ellipse([dot_x - 15, 852 + th / 2 - 13, dot_x + 15, 852 + th / 2 + 17],
-                  fill=(232, 55, 55, 255))
+        top_text = f"LIVE   •   {detail}"
+        main_text = f"{game.left.score or '0'} - {game.right.score or '0'}"
+        main_size = 96
+        is_live = True
     else:
         detail = (game.status_detail or "FINAL").upper()
         detail = {"FT": "FULL TIME"}.get(detail, detail)
-        _center_text(d, cx, 852, f"{detail}   •   {date_s}", FONT_BOLD, 58, 1700)
+        top_text = f"{detail}   •   {date_s}"
+        main_text = f"{game.left.score or '0'} - {game.right.score or '0'}"
+        main_size = 96
 
-    y = 936
+    # Measure texts to construct the dynamic box
+    f_top = _font(FONT_BOLD, 26)
+    tw_top, th_top = _tsize(d, top_text, f_top)
+
+    f_main = _fit_font(d, main_text, FONT_BOLD, main_size, 330)
+    tw_main, th_main = _tsize(d, main_text, f_main)
+
+    # Allow extra space in the top text width if rendering the live red dot
+    dot_space = 36 if is_live else 0
+    total_top_w = tw_top + dot_space
+
+    bw = max(total_top_w + 60, tw_main + 100, 320)
+    bh = th_top + th_main + 50
+
+    box_top = cy - bh / 2
+    d.rounded_rectangle([cx - bw / 2, box_top, cx + bw / 2, box_top + bh],
+                        radius=24, fill=(13, 22, 43, 242),
+                        outline=(255, 255, 255, 255), width=5)
+
+    # Render top line (Status/Time)
+    top_y = box_top + 16
+    if is_live:
+        text_x = cx + 12
+        _center_text(d, text_x, top_y, top_text, FONT_BOLD, 26, bw, shadow=False)
+        tw_top_actual, _ = _tsize(d, top_text, f_top)
+        
+        # Red Dot 
+        dot_r = 7
+        dot_cx = text_x - tw_top_actual / 2 - 16
+        dot_cy = top_y + th_top / 2 + 2
+        d.ellipse([dot_cx - dot_r, dot_cy - dot_r, dot_cx + dot_r, dot_cy + dot_r], fill=(232, 55, 55, 255))
+    else:
+        _center_text(d, cx, top_y, top_text, FONT_BOLD, 26, bw, shadow=False)
+
+    # Render main line (Score/VS)
+    main_y = top_y + th_top + 8
+    _center_text(d, cx, main_y, main_text, FONT_BOLD, main_size, 330, shadow=False)
+
+    # Render single broadcast channel right below the box
     if game.broadcast:
-        _center_text(d,cx,y,game.broadcast.split(",")[0],FONT_REG,46,1700,fill=(255,255,255,240))
-        y += 66
-    if game.venue:
-        _center_text(d, cx, y, game.venue, FONT_REG, 36, 1500, fill=(255, 255, 255, 185))
+        single_channel = game.broadcast.split(',')[0].strip()
+        _center_text(d, cx, box_top + bh + 16, single_channel, FONT_BOLD, 28, 400, fill=(255, 255, 255, 240))
 
 
 def render_game(game: Game, tz_name: str) -> bytes:
@@ -287,8 +292,7 @@ def render_game(game: Game, tz_name: str) -> bytes:
         _center_text(d, cx, 738, side.short_name.upper(), FONT_BOLD, 60, 830, fill=fill)
 
     _league_header(img, game)
-    _center_badge(img, game)
-    _bottom_block(img, game, tz)
+    _center_badge(img, game, tz)
 
     buf = io.BytesIO()
     img.convert("RGB").save(buf, "PNG", optimize=True)
