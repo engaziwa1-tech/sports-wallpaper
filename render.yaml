@@ -11,7 +11,7 @@ services:
       - key: LEAGUES
         value: soccer/fifa.world,baseball/mlb,basketball/wnba
       - key: TEAMS
-        value: "baseball/mlb:Braves,baseball/mlb:Dodgers,basketball/wnba:Sun"
+        value: ""
       - key: TIMEZONE
         value: America/Chicago
       - key: MAX_GAMES
