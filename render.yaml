@@ -9,9 +9,9 @@ services:
       - key: PYTHON_VERSION
         value: 3.12.4
       - key: LEAGUES
-        value: soccer/fifa.world,baseball/mlb, basketball/wnba
+        value: soccer/fifa.world,baseball/mlb,basketball/wnba
       - key: TEAMS
-        value: "baseball/mlb:Braves,baseball/mlb:Dodgers,basketball/wnba:Sun,soccer/fifa.world:USA"
+        value: "baseball/mlb:Braves,baseball/mlb:Dodgers,basketball/wnba:Sun"
       - key: TIMEZONE
         value: America/Chicago
       - key: MAX_GAMES
